@@ -6,23 +6,60 @@
 		-- make error message function
 */
 
+/* 
+	input data structures for Machine 
+
+		-- list of register names
+			~ array
+		-- list of pairs {opName : actualOp}
+			~ dictionary
+		-- controller instruction list
+			~ array
+				~ string? should we bring in
+					a lisp parser?
+			~ don't include word 'controller'
+	
+	example:
+
+	(define gcd-machine
+		(make-machine
+			;; register names
+			'(a b t) 
+			;; opName / op pairs
+			(list (list 'rem remainder)
+					(list '= =))
+			;; instruction list (string?)
+			'(test-b
+				(test (op =) (reg b) (const 0))
+				(branch (label gcd-done))
+				(assign t (op rem) (reg a) (reg b))
+				(assign a (reg b))
+				(assign b (reg t))
+				(goto (label test-b))
+			gcd-done)))
+*/
+
+
 /* machines */
 function Machine(registers, operations, controllerText) {
 	
 	var counter = new Register('counter');
 	var flag = new Register('flag');
-	this.stack = new Stack();
-		var stack = this.stack;
+	this.stack = new Stack(); // should this be private?
+	var stack = this.stack;
 
 	/* registers */
 	// TODO: change this to a regular dictionary
+	// can we make this take register.name
+		// rather than the actual name string?
 	 var registerTable =
 		[
 			{'counter' : counter},
 			{'flag' : flag}
 		];
 	// TODO: change allocateRegister too
-	this.allocateRegister = 
+	// should this be public?
+	var allocateRegister = 
 		function(name) {
 			if (assoc(name, registerTable)) // assoc???
 				throw 'Multiply-defined register ' + name;
@@ -50,7 +87,7 @@ function Machine(registers, operations, controllerText) {
 		[
 			{ 'initialize-stack' : stack.initialize() }
 		];
-
+	// privatize these?
 	this.operations = basicOperations.concat(operations);
 
 	this.installOperations =
@@ -62,6 +99,7 @@ function Machine(registers, operations, controllerText) {
 
 	var basicInstructions = []; // needed?
 
+	// should 'self' be used instead of 'this'?
 	var instructions = assemble(controllerText, this);
 
 	this.installInstructions =
@@ -70,7 +108,7 @@ function Machine(registers, operations, controllerText) {
 	};
 
 	/* run */
-
+	// ???
 	 var execute = 
 		function() {
 			var instructions = getContents(counter);
@@ -179,7 +217,7 @@ function push(stack, value) {
 
 /* lisp stuff */
 
-var errorText = 'ASSEMLBE -- bad instruction : ';
+var errorText = 'ASSEMBLE -- bad instruction : ';
 
 function assemble(controllerText, machine) {
 	var run = // better name?
@@ -237,6 +275,7 @@ function setInstructionExecutionFunc(instruction, func) {
 
 function makeExecutionFunc(instruction, labels, machine,
 							counter, flag, stack, operations) {
+
 	var text = instructionText(instruction);
 
 	if (text == 'assign')
@@ -273,7 +312,8 @@ function advanceCounter(counter) {
 }
 
 // assign
-function makeAssign(instruction, machine, labels, operations, counter) {
+function makeAssign(instruction, machine, labels, 
+							operations, counter) {
 
 	var target = getRegister(machine, assignRegName(instruction));
 	var valueExp = assignValueExp(instruction);
@@ -324,7 +364,7 @@ function testCondition(testInstruction) {
 
 
 // branch
-function makeBranch(instruction, machine, labels
+function makeBranch(instruction, machine, labels,
 						flag, counter) {
 
 	var destination = branchDestination(instruction);
@@ -334,7 +374,7 @@ function makeBranch(instruction, machine, labels
 
 	var instructions =
 		lookupLabel(labels, 
-					(labelExpLabel destination));
+					labelExpLabel(destination));
 
 	return function() {
 		if (getContents(flag)) { // flag should be holding boolean?
@@ -492,8 +532,38 @@ function labelExpLabel(exp) {
 
 
 // operations
+// ???
 function makeOperationExp(exp, machine, labels, operations) {
-	
+	var operation =
+		lookupPrimitive(operationExpOp(exp), operations);
+	var aFuncs = // what is 'a'? what is 'e'?
+		(operationExpOperands(exp)).forEach(function(e) {
+			makePrimitiveExp(e, machine, labels);
+		});
+	return function() {
+		// ???
+	};
+}
+
+// operation helpers
+function lookupPrimitive(symbol, operations) {
+	var val = assoc(symbol, operations);
+	if (val)
+		return val.slice(1)[0]; // lazy
+	else
+		throw 'ASSEMBLE -- Unknown operation : ' + symbol;
+}
+
+function operationExp(exp) {
+	return exp[0] == 'op'; // and pair?
+}
+
+function operationExpOp(operationExp) {
+	return operationExp[0].slice(1)[0];
+}
+
+function operationExpOperands(operationExp) {
+	return operationExp.slice(1);
 }
 
 
