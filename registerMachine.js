@@ -1,5 +1,3 @@
-
-
 /*
 	example (from book):
 
@@ -20,9 +18,6 @@
 				(goto (label test-b))
 			gcd-done)))
 
-	Maybe write the machine code directly in JS?
-
-
 	machineData is an array consisting of
 		> an array of register names,
 		> an array of input register names
@@ -40,9 +35,31 @@
 	getting passed to the assembler.
 */
 
-// TODO: designate start and return registers
+var controllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (reg a)) rem-loop (test (op <) (reg t) (reg b)) (branch (label rem-done)) (assign t (op -) (reg t) (reg b)) (goto (label rem-loop)) rem-done (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)'
+var registers = ['a','b','t'];
+var inputRegisters = ['a','b'];
+var outputRegister = 'a';
+var operations = 
+	 {
+	 	'=' : function(a,b) {return a == b;},
+	 	'<' : function(a,b) {return a < b;},
+	 	'-' : function(a,b) {return a - b;},
+	 }
+
+var gcdData = 	
+	[
+		registers, 
+		inputRegisters, 
+		outputRegister, 
+		operations, 
+		controllerText
+	];
+
+var gcdMachine = new Machine(gcdData);
 
 function Machine(machineData) {
+	var machine = this;
+
 	var counter = new Register('counter');
 	var flag = new Register('flag');
 	var stack = new Stack();
@@ -50,7 +67,7 @@ function Machine(machineData) {
 	/* registers */
 
 	var registerNames = machineData[0];
-	var inputRegisters = machineData[1];
+	var inputRegister = machineData[1];
 	var outputRegister = machineData[2];
 
 	var registerTable = 
@@ -58,12 +75,13 @@ function Machine(machineData) {
 			'counter' : counter,
 			'flag' : flag,
 		};
-
-	this.lookupRegister(name) {
+	// leave public for debugging
+	this.lookupRegister = function(name) {
 		if (name in registerTable) 
 			return registerTable.name;
 		else
-			throw 'Unknown register: ' + name;
+			throw 'LOOKUP-REGISTER -- ' + 
+				'Unknown register: ' + name;
 	}
 
 	function allocateRegister(name) {
@@ -73,20 +91,23 @@ function Machine(machineData) {
 			registerTable[name] = new Register(name);
 	}
 
-	// on creation
-	registerNames.forEach(function(name) {
-		allocateRegister(name);
-	});
+	function installRegisters() {
+		registerNames.forEach(function(name) {
+			allocateRegister(name);
+		});
+	}
 
-	this.setInputs(inputs) {
+	installRegisters();
+
+	this.setInputs = function(inputs) {
 		for (i = 0; i < inputs.length; i++)
 			inputRegisters[i].set(inputs[i]);
 	}
 
-	this.output = outputRegister.contents();
+	this.output = 
+		this.lookupRegister(outputRegister).contents();
 
 	/* operations */
-	// TODO: sort this out
 
 	var operations = machineData[3];
 
@@ -97,11 +118,12 @@ function Machine(machineData) {
 			function() {stack.initialize();},
 		};
 
-	// on creation
-	for (opName in basicOperations)
-		operations[opName] = basicOperations[opName];
+	function installOperations() {
+		for (opName in basicOperations)
+			operations[opName] = basicOperations[opName];
+	}
 
-	// install operations?
+	installOperations();
 
 
 	/* instructions */
@@ -119,7 +141,7 @@ function Machine(machineData) {
 	var instructions = assembledText[0];
 	var labels = assembledText[1];
 
-	function updateInstructions() {
+	function installInstructions() {
 		instructions.forEach(function(instruction) {
 			var text = instruction.text;
 			var executionFunc = 
@@ -128,6 +150,19 @@ function Machine(machineData) {
 			instruction.setFunc(executionFunc);
 		});
 	}
+
+	// this assumes labels is set up as a array pairs,
+	// rather than a proper dictionary
+	function lookupLabel(labelName) {
+		for (entry in labels) {
+			if (entry[0] == labelName)
+				return entry[1];
+			else
+				throw 'Undefined label: ' + labelName;
+		}
+	}
+
+	/* instruction functions */
 
 	function makeFunc(instruction) {
 		var type = instruction.type;
@@ -151,55 +186,113 @@ function Machine(machineData) {
 						+ ' -- ASSEMBLE : ' + type;
 	}
 
-	function makeAssign(instruction) {
+	function throwError(instructionType) {
+		throw 'ASSEMBLE -- bad ' +
+				instructionType +
+				' instruction';
+	} 
 
+	function makeAssign(instruction) {
+		var targetName = instruction.assignRegName;
+		var target = machine.lookupRegister(targetName);
+		var valueExp = instruction.assignValueExp;
+		var valueFunc = operationExp(valueExp) ?
+						makeOperationExp(valueExp) :
+						makePrimitiveExp(valueExp[0]);
+		return function() {
+			target.set(valueFunc);
+			advanceCounter();
+		};
 	}
 
 	function makeTest(instruction) {
-
+		var condition = instruction.testCondition;
+		if (!operationExp(condition))
+			throwError('TOAST');
+		var conditionFunc = 
+			makeOperationExp(condition);
+		return function() {
+			flag.set(conditionFunc);
+			advanceCounter();
+		}
 	}
 
 	function makeBranch(instruction) {
-
+		var destination = instruction.destination;
+		if (!labelExp(destination))
+			throwError('BRUNCH');
+		var label = labelExpLabel(destination);
+		var destInstructions = lookupLabel(label);
+		return function() {
+			if (flag.contents())
+				counter.set(destInstructions);
+			else
+				advanceCounter();
+		};
 	}
 
 	function makeGoto(instruction) {
-
+		var destination = instruction.destination;
+		if (labelExp(destination)) {
+			var label = labelExpLabel(destination);
+			var destInstructions = lookupLabel(label);
+			return function() {
+				counter.set(destInstructions);
+			}
+		}
+		if (registerExp(destination)) {
+			var registerName =
+				regExpRegister(destination);
+			var register = 
+				lookupRegister(registerName);
+			return function() {
+				counter.set(register.contents());
+			}
+		}
+		else throwError('GOOT')
 	}
 
 	function makeSave(instruction) {
-		var stackInstRegName = instruction[1];
+		var stackInstRegName = 
+			instruction.stackInstRegName;
 		var register =
-			this.lookupRegister(stackInstRegName);
+			machine.lookupRegister(stackInstRegName);
 		return function() {
 			stack.pushIt(register.contents());
 		};
 	}
 
 	function makeRestore(instruction) {
-		var stackInstRegName = instruction[1];
+		var stackInstRegName = 
+			instruction.stackInstRegName;
 		var register =
-			this.lookupRegister(stackInstRegName);
+			machine.lookupRegister(stackInstRegName);
 		return function() {
 			registers.set(stack.popIt());
 		}
 	}
 
 	function makePerform(instruction) {
-
+		var action = instruction.action;
+		if (!operationExp(action))
+			throwError('PERFROM');
+		var actionFunc = makeOperationExp(action);
+		return function() {
+			actionFunc();
+			advanceCounter();
+		}
 	}
-
-
-
-
-
-
 
 	function advanceCounter() {
 		counter.set(counter.contents().slice(1))
 	}
 
-
+	/* installation */
+/*
+	installRegisters();
+	installOperations();
+	installInstructions();
+*/
 	/* run */
 
 	/* 
@@ -210,7 +303,6 @@ function Machine(machineData) {
 		var docket = counter.contents();
 		if (docket.length == 0)
 			return 'done!';
-
 		var instruction = docket[0];
 		instruction.executeFunc();
 		execute();
@@ -225,12 +317,11 @@ function Machine(machineData) {
 	// inputs should be an array
 	// # of inputs should equal # of start regs
 	this.run = function(inputs) {
-		this.setInputs(inputs);
-		this.start();
-		return this.output;
+		machine.setInputs(inputs);
+		machine.start();
+		return machine.output;
 	}
 }
-
 
 
 /* registers */
@@ -258,31 +349,56 @@ function Stack() {
 	}
 
 	this.popIt = function() {
-		if (contents.length == 1)
+		if (contents.length < 1)
 			throw "Empty stack -- POP";
 		else
 			return contents.shift();
 	}
 
-	this.initialize() {
+	this.initialize = function() {
 		contents = [];
 		return 'initialized!';
 	}
 }
 
-/* instructions */
+/* instructions and assembler */
 
 function Instruction(text) {
 	/* not actual text, since the controller-text
 		will alreay have been parsed */
 	this.text = text;
+	var text = this.text;
 
+	// instruction types
 	this.type = text[0];
+	var type = this.type;
 
+	if (type == 'assign') {
+		this.assignRegName = text[1];
+		this.assignValueExp = text.slice(2);
+	}
+
+	if (type == 'test') {
+		this.testCondition = text.slice(1);
+	}
+
+	if (type == 'branch' || type == 'goto') {
+		this.destination = text[1];
+	}
+
+	if (type == 'save' || type == 'restore') {
+		this.stackInstRegName = text[1];
+	}
+
+	if (type == 'perform') {
+		this.action = text.slice(1);
+	}
+
+	// execution function (dummy initially)
 	var func = function(){};
 
-	this.setFunc = function(func) {
-		func = func;
+	this.setFunc = function(f) {
+		func = f;
 	};
 
 	this.executeFunc() = function() {
@@ -290,6 +406,8 @@ function Instruction(text) {
 	}
 }
 
+// labels should be arranged as a real dictionary,
+// not array pairs (TODO)
 function assemble(text) {
 	if (text.length == 0)
 		return [ [], [] ];
@@ -300,14 +418,14 @@ function assemble(text) {
 	var labels = result[1];
 	var nextInstruction = text[0];
 
-	// nextInstruction is a label
+	// if nextInstruction is a label
 	if (typeof(nextInstruction) == 'string') {
 		var entry = [nextInstruction, instructions];
 		labels.unshift(entry);
 		return [instructions, labels];
 	}
 
-	// nextInstruction is an instruction
+	// if nextInstruction is an instruction
 	else {
 		var instruction = 
 			new Instruction(nextInstruction);
@@ -317,29 +435,47 @@ function assemble(text) {
 }
 
 
+/* expression types (low-level helpers) */
+
+function registerExp(expression) {
+	return expression[0] == 'reg';
+}
+
+function regExpRegister(expression) {
+	return expression[1];
+}
+
+function constantExp(expression) {
+	return expression[0] == 'const';
+}
+
+function constExpConstant(expression) {
+	return expression[1];
+}
+
+function labelExp(expression) {
+	return expression[0] == 'label';
+}
+
+function labelExpLabel(expression) {
+	return expression[1];
+}
+
+function operationExp(expression) {
+	return expression.length >= 2 &&
+		expression[0][0] == 'op';
+}
+
+function opExpOperation(expression) {
+	return expression[0][1];
+}
+
+function opExpOperands(expression) {
+	return expression.slice(1);
+}
 
 
-
-
-
-
-
-/* expression types */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// functional interface
+/* functional interface (not needed?) */
 
 function pop(stack) {
 	return stack.popIt();
@@ -371,24 +507,40 @@ function startMachine(machine) {
 	machine.start();
 }
 
+/* parser */
 
+function parse(text) {
 
+	return readTokens(tokenize(text));
 
+	function readTokens(tokens) {
+		if (tokens.length == 0) return [];
+		var token = tokens.shift();
+		if (token == '(') {
+			var result = [];
+			while (tokens[0] != ')')
+				result.push(readTokens(tokens));
+			tokens.shift();
+			return result;
+		}
+		else if (token == ')') throw 'unexpected )';
+		else return atom(token);
+	}
 
+	function tokenize(chars) {
+		var tokens = 
+			chars.replace(/[(]/g, ' ( ').
+				replace(/[)]/g, ' ) ').
+					split(' ');
+		for (i = 0; i < tokens.length; i++)
+			if (tokens[i] == '')
+				tokens.splice(tokens.indexOf(''),1);
+		return tokens;
+	}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+	function atom(token) {
+		var test = token - 0;
+		if (isNaN(test)) return token;
+		else return test;
+	}
+}
