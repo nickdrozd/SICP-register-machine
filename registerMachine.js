@@ -20,6 +20,9 @@
 				(goto (label test-b))
 			gcd-done)))
 
+	Maybe write the machine code directly in JS?
+
+
 	machineData is an array consisting of
 		> an array of register names,
 		> an array of input register names
@@ -80,15 +83,14 @@ function Machine(machineData) {
 			inputRegisters[i].set(inputs[i]);
 	}
 
-	this.getOutput() {
-		return outputRegister.get();
-	}
+	this.output = outputRegister.contents();
 
 	/* operations */
 	// TODO: sort this out
 
 	var operations = machineData[3];
 
+	// more basic ops can be added later
 	var basicOperations = 
 		{
 			'initializeStack' : 
@@ -104,40 +106,114 @@ function Machine(machineData) {
 
 	/* instructions */
 
+	/*
+		major instruction manipulation functions
+		defined outside of machine:
+			~ parse
+			~ assemble
+	*/
+
 	var controllerText = machineData[4];
+	var parsedtext = parse(controllerText);
+	var assembledText = assemble(parsedText);
+	var instructions = assembledText[0];
+	var labels = assembledText[1];
 
-	// make assemble a private method?
-	var instructions = assemble(controllerText, machine);
+	function updateInstructions() {
+		instructions.forEach(function(instruction) {
+			var text = instruction.text;
+			var executionFunc = 
+				makeFunc(text);
 
-	function assemble() {
+			instruction.setFunc(executionFunc);
+		});
+	}
+
+	function makeFunc(instruction) {
+		var type = instruction.type;
+
+		if (type == 'assign')
+			return makeAssign(instruction);
+		if (type == 'test')
+			return makeTest(instruction);
+		if (type == 'branch')
+			return makeBranch(instruction);
+		if (type == 'goto')
+			return makeGoto(instruction);
+		if (type == 'save')
+			return makeSave(instruction);
+		if (type == 'restore')
+			return makeRestore(instruction);
+		if (text == 'perform')
+			return makePerform(instruction);
+		else
+			throw 'Unknown instruction type' 
+						+ ' -- ASSEMBLE : ' + type;
+	}
+
+	function makeAssign(instruction) {
 
 	}
 
+	function makeTest(instruction) {
 
+	}
 
+	function makeBranch(instruction) {
 
+	}
 
+	function makeGoto(instruction) {
 
+	}
 
+	function makeSave(instruction) {
+		var stackInstRegName = instruction[1];
+		var register =
+			this.lookupRegister(stackInstRegName);
+		return function() {
+			stack.pushIt(register.contents());
+		};
+	}
 
-
-
-
-
-	/* run */
-	// should these all be private? (except for run)
-	function execute() {
-		// check counter?
-		if (instructions.length == 0)
-			return 'done!';
-		else { // ???
-			instructionExecutionFunc(instructions[0]);
-			execute();
+	function makeRestore(instruction) {
+		var stackInstRegName = instruction[1];
+		var register =
+			this.lookupRegister(stackInstRegName);
+		return function() {
+			registers.set(stack.popIt());
 		}
 	}
 
-	this.advanceCounter() {
-		counter.set(counter.get().slice(1))
+	function makePerform(instruction) {
+
+	}
+
+
+
+
+
+
+
+	function advanceCounter() {
+		counter.set(counter.contents().slice(1))
+	}
+
+
+	/* run */
+
+	/* 
+		Question: why do we put advanceCounter in the
+		individual instructions, rather than in execute?
+	*/
+	function execute() {
+		var docket = counter.contents();
+		if (docket.length == 0)
+			return 'done!';
+
+		var instruction = docket[0];
+		instruction.executeFunc();
+		execute();
 	}
 
 	// private?
@@ -150,19 +226,19 @@ function Machine(machineData) {
 	// # of inputs should equal # of start regs
 	this.run = function(inputs) {
 		this.setInputs(inputs);
-
 		this.start();
-
-		return this.getOutput();
+		return this.output;
 	}
 }
+
+
 
 /* registers */
 
 function Register(name) {
 	 var contents = '*unassigned*';
 
-	 this.get = function() {
+	 this.contents = function() {
 	 	return contents;
 	 }
 
@@ -176,11 +252,12 @@ function Register(name) {
 function Stack() {
 	var contents = [];
 
-	this.push = function(value) {
+	this.pushIt = function(value) {
 		contents.unshift(value);
+		return 'push it! push it good!';
 	}
 
-	this.pop = function() {
+	this.popIt = function() {
 		if (contents.length == 1)
 			throw "Empty stack -- POP";
 		else
@@ -194,62 +271,51 @@ function Stack() {
 }
 
 /* instructions */
-// TODO: parser
+
 function Instruction(text) {
-	this.text = parse(text);
+	/* not actual text, since the controller-text
+		will alreay have been parsed */
+	this.text = text;
 
 	this.type = text[0];
 
-	this.func = function(){};
+	var func = function(){};
 
 	this.setFunc = function(func) {
-		this.func = func;
+		func = func;
 	};
+
+	this.executeFunc() = function() {
+		func();
+	}
 }
 
-
-// TODO
-function extractLabels(text, receive) {
+function assemble(text) {
 	if (text.length == 0)
-		return receive([],[]);
+		return [ [], [] ];
 
-	var collector =
-		function(instructions, labels) {
-			var nextInstruction = text[0];
-			if (typeof(nextInstruction) == 'string')
-				return ;
-			else
-				return ;
-	};
+	// will this recursion be a problem?
+	var result = assemble(text.slice(1));
+	var instructions = result[0];
+	var labels = result[1];
+	var nextInstruction = text[0];
+
+	// nextInstruction is a label
+	if (typeof(nextInstruction) == 'string') {
+		var entry = [nextInstruction, instructions];
+		labels.unshift(entry);
+		return [instructions, labels];
+	}
+
+	// nextInstruction is an instruction
+	else {
+		var instruction = 
+			new Instruction(nextInstruction);
+		instructions.unshift(instruction);
+		return [instructions, labels];
+	}
 }
 
-function makeLabelEntry(labelName, instructions) {
-	return [labelName, instructions];
-}
-
-
-// move to machine
-function makeFunc(instruction, labels, machine) {
-	var type = instruction.type;
-
-	if (type == 'assign')
-		return makeAssign(instruction, labels, machine);
-	if (type == 'test')
-		return makeTest(instruction, labels, machine);
-	if (type == 'branch')
-		return makeBranch(instruction, labels, machine);
-	if (type == 'goto')
-		return makeGoto(instruction, labels, machine);
-	if (type == 'save')
-		return makeSave(instruction, machine);
-	if (type == 'restore')
-		return makeRestore(instruction, machine);
-	if (text == 'perform')
-		return makePerform(instruction, labels, machine);
-	else
-		throw 'Unknown instruction type' 
-					+ ' -- ASSEMBLE : ' + type;
-}
 
 
 
@@ -276,15 +342,15 @@ function makeFunc(instruction, labels, machine) {
 // functional interface
 
 function pop(stack) {
-	return stack.pop();
+	return stack.popIt();
 }
 
 function push(stack, value) {
-	stack.push(value);
+	stack.pushIt(value);
 }
 
 function getContents(register) {
-	return register.get();
+	return register.contents();
 }
 
 function setContents(register, value) {
