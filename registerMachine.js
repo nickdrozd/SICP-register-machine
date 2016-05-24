@@ -1,4 +1,9 @@
 /*
+	TODO:
+		~ update the instructions in labels
+*/
+
+/*
 	example (from book):
 
 	(define gcd-machine
@@ -35,7 +40,8 @@
 	getting passed to the assembler.
 */
 
-var controllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (reg a)) rem-loop (test (op <) (reg t) (reg b)) (branch (label rem-done)) (assign t (op -) (reg t) (reg b)) (goto (label rem-loop)) rem-done (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)'
+//var controllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (reg a)) rem-loop (test (op <) (reg t) (reg b)) (branch (label rem-done)) (assign t (op -) (reg t) (reg b)) (goto (label rem-loop)) rem-done (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)'
+var controllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (op rem) (reg a) (reg b)) (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)';
 var registers = ['a','b','t'];
 var inputRegisters = ['a','b'];
 var outputRegister = 'a';
@@ -44,6 +50,7 @@ var operations =
 	 	'=' : function(a,b) {return a == b;},
 	 	'<' : function(a,b) {return a < b;},
 	 	'-' : function(a,b) {return a - b;},
+	 	'rem' : function(a,b) {return a % b;},
 	 }
 
 var gcdData = 	
@@ -55,7 +62,7 @@ var gcdData =
 		controllerText
 	];
 
-var gcdMachine = new Machine(gcdData);
+var gcd = new Machine(gcdData);
 
 function Machine(machineData) {
 	var machine = this;
@@ -64,10 +71,14 @@ function Machine(machineData) {
 	var flag = new Register('flag');
 	var stack = new Stack();
 
+	this.counter = counter;
+	this.flag = flag;
+	this.stack = stack;
+
 	/* registers */
 
 	var registerNames = machineData[0];
-	var inputRegister = machineData[1];
+	var inputRegisters = machineData[1];
 	var outputRegister = machineData[2];
 
 	var registerTable = 
@@ -75,10 +86,11 @@ function Machine(machineData) {
 			'counter' : counter,
 			'flag' : flag,
 		};
+	this.registerTable = registerTable;
 	// leave public for debugging
 	this.lookupRegister = function(name) {
 		if (name in registerTable) 
-			return registerTable.name;
+			return registerTable[name];
 		else
 			throw 'LOOKUP-REGISTER -- ' + 
 				'Unknown register: ' + name;
@@ -86,7 +98,8 @@ function Machine(machineData) {
 
 	function allocateRegister(name) {
 		if (name in registerTable)
-			throw name + ' already defined!';
+			throw 'register *' + name + 
+				'* already defined!';
 		else
 			registerTable[name] = new Register(name);
 	}
@@ -97,15 +110,26 @@ function Machine(machineData) {
 		});
 	}
 
-	installRegisters();
+	//installRegisters();
 
-	this.setInputs = function(inputs) {
-		for (i = 0; i < inputs.length; i++)
-			inputRegisters[i].set(inputs[i]);
+	this.setInputs = function(inputs) {//debugger;
+		for (i = 0; i < inputs.length; i++){
+			var input = inputs[i];
+			var registerName = inputRegisters[i];
+			var register = machine.lookupRegister(registerName);
+			register.set(input);
+		}
+		return 'inputs set!';
 	}
 
-	this.output = 
+	this.getRegisterContents = function(name) {
+		var register = machine.lookupRegister(name);
+		return register.contents();
+	}
+
+	this.output = function() {
 		this.lookupRegister(outputRegister).contents();
+	}
 
 	/* operations */
 
@@ -118,12 +142,20 @@ function Machine(machineData) {
 			function() {stack.initialize();},
 		};
 
+	function lookupOperation(name) {
+		if (name in operations)
+			return operations[name];
+		else
+			throw 'LOOKUP-OPERATION -- ' +
+				'Unknown operation : ' + name;
+	}
+
 	function installOperations() {
 		for (opName in basicOperations)
 			operations[opName] = basicOperations[opName];
 	}
 
-	installOperations();
+	//installOperations();
 
 
 	/* instructions */
@@ -136,35 +168,65 @@ function Machine(machineData) {
 	*/
 
 	var controllerText = machineData[4];
-	var parsedtext = parse(controllerText);
+	var parsedText = parse(controllerText);
 	var assembledText = assemble(parsedText);
 	var instructions = assembledText[0];
 	var labels = assembledText[1];
 
+	this.instructions = instructions;
+	this.labels = labels;
+
+	debugger;
+
 	function installInstructions() {
-		instructions.forEach(function(instruction) {
-			var text = instruction.text;
+		instructions.forEach(function(instruction) {//debugger;
+			//var text = instruction.text;
 			var executionFunc = 
-				makeFunc(text);
+				makeFunc(instruction);
 
 			instruction.setFunc(executionFunc);
 		});
+/*
+		for (i = 0; i < machine.labels.length; i++) {debugger;
+			var labelInstructions = machine.labels[i][1];
+			for (j = 0; j < labelInstructions.length; i++) {
+				var instruction = labelInstructions[j];
+				var executionFunc = makeFunc(instruction);
+				instruction.setFunc(executionFunc);
+			}
+		}
+*/
 	}
+
+	//installInstructions();
 
 	// this assumes labels is set up as a array pairs,
 	// rather than a proper dictionary
 	function lookupLabel(labelName) {
+		for (i = 0; i < labels.length; i++) {//debugger;
+			var entry = labels[i];
+			var label = entry[0];
+			var destination = entry[1];
+			if (label == labelName)
+				return destination; 
+		}
+
+		throw 'Undefined label: ' + labelName;
+
+		/*
+		// this should work for a real dictionary
 		for (entry in labels) {
 			if (entry[0] == labelName)
 				return entry[1];
 			else
 				throw 'Undefined label: ' + labelName;
 		}
+		*/
 	}
 
 	/* instruction functions */
 
-	function makeFunc(instruction) {
+	function makeFunc(instruction) {//debugger;
 		var type = instruction.type;
 
 		if (type == 'assign')
@@ -179,11 +241,12 @@ function Machine(machineData) {
 			return makeSave(instruction);
 		if (type == 'restore')
 			return makeRestore(instruction);
-		if (text == 'perform')
+		if (type == 'perform')
 			return makePerform(instruction);
 		else
-			throw 'Unknown instruction type' 
-						+ ' -- ASSEMBLE : ' + type;
+			throw 'Unknown instruction type' +
+						' -- makeFunc : ' + 
+							instruction;
 	}
 
 	function throwError(instructionType) {
@@ -192,28 +255,35 @@ function Machine(machineData) {
 				' instruction';
 	} 
 
-	function makeAssign(instruction) {
+	function makeAssign(instruction) {//debugger;
 		var targetName = instruction.assignRegName;
 		var target = machine.lookupRegister(targetName);
 		var valueExp = instruction.assignValueExp;
+		// var valueFunc;
+		// if (operationExp(valueExp))
+		// 	valueFunc = makeOperationExp(valueExp);
+		// else
+		// 	valueFunc = makePrimitiveExp(valueExp[0]);
 		var valueFunc = operationExp(valueExp) ?
 						makeOperationExp(valueExp) :
 						makePrimitiveExp(valueExp[0]);
 		return function() {
-			target.set(valueFunc);
-			advanceCounter();
+			target.set(valueFunc());
+			//advanceCounter();
+			machine.advanceCounter();
 		};
 	}
 
-	function makeTest(instruction) {
+	function makeTest(instruction) {//debugger;
 		var condition = instruction.testCondition;
 		if (!operationExp(condition))
 			throwError('TOAST');
 		var conditionFunc = 
 			makeOperationExp(condition);
 		return function() {
-			flag.set(conditionFunc);
-			advanceCounter();
+			machine.flag.set(conditionFunc());
+			//advanceCounter();
+			machine.advanceCounter();
 		}
 	}
 
@@ -224,10 +294,11 @@ function Machine(machineData) {
 		var label = labelExpLabel(destination);
 		var destInstructions = lookupLabel(label);
 		return function() {
-			if (flag.contents())
-				counter.set(destInstructions);
+			if (machine.flag.contents())
+				machine.counter.set(destInstructions);
 			else
-				advanceCounter();
+				//advanceCounter();
+				machine.advanceCounter();
 		};
 	}
 
@@ -237,7 +308,7 @@ function Machine(machineData) {
 			var label = labelExpLabel(destination);
 			var destInstructions = lookupLabel(label);
 			return function() {
-				counter.set(destInstructions);
+				machine.counter.set(destInstructions);
 			}
 		}
 		if (registerExp(destination)) {
@@ -246,7 +317,7 @@ function Machine(machineData) {
 			var register = 
 				lookupRegister(registerName);
 			return function() {
-				counter.set(register.contents());
+				machine.counter.set(register.contents());
 			}
 		}
 		else throwError('GOOT')
@@ -258,7 +329,7 @@ function Machine(machineData) {
 		var register =
 			machine.lookupRegister(stackInstRegName);
 		return function() {
-			stack.pushIt(register.contents());
+			machine.stack.pushIt(register.contents());
 		};
 	}
 
@@ -268,7 +339,7 @@ function Machine(machineData) {
 		var register =
 			machine.lookupRegister(stackInstRegName);
 		return function() {
-			registers.set(stack.popIt());
+			register.set(stack.popIt());
 		}
 	}
 
@@ -279,20 +350,72 @@ function Machine(machineData) {
 		var actionFunc = makeOperationExp(action);
 		return function() {
 			actionFunc();
-			advanceCounter();
+			//advanceCounter();
+			machine.advanceCounter();
 		}
 	}
 
 	function advanceCounter() {
-		counter.set(counter.contents().slice(1))
+		counter.set(counter.contents().slice(1));
+	}
+
+	this.advanceCounter = function() {
+		machine.counter.set(machine.counter.contents().slice(1));
+		console.log('counter advanced!');
+	}
+
+	/* subexpression functions */
+
+	function makePrimitiveExp(expression) {//debugger;
+		if (constantExp(expression)) {
+			var constant = 
+				constExpConstant(expression);
+			return function() {
+				return constant;
+			};
+		}
+		else if (labelExp(expression)) {
+			var label = labelExpLabel(expression);
+			var labelInstructions = 
+				lookupLabel(label);
+			return function() {
+				return labelInstructions;
+			};
+		}
+		else if (registerExp(expression)) {//debugger;
+			var registerName = 
+				regExpRegister(expression);
+			var register = 
+				machine.lookupRegister(registerName);
+			return function() {
+				return register.contents();
+			};
+		}
+		else throw 'makePrimitiveExp -- ' + 
+			'Unknown expression type' + expression;
+	}
+
+	function makeOperationExp(expression) {//debugger;
+		var registerTable = machine.registerTable;
+		var operationName = 
+			opExpOperation(expression);
+		var operation = 
+			lookupOperation(operationName);
+		var operands = opExpOperands(expression);
+		var aprocs = operands.map(makePrimitiveExp);
+		var aprocsExecuted = 
+			aprocs.map(function(f){return f();});
+		return function() {
+			return operation.apply(null,aprocsExecuted);
+		};
 	}
 
 	/* installation */
-/*
+
 	installRegisters();
 	installOperations();
 	installInstructions();
-*/
+
 	/* run */
 
 	/* 
@@ -301,10 +424,16 @@ function Machine(machineData) {
 	*/
 	function execute() {
 		var docket = counter.contents();
+		//console.log(docket);
 		if (docket.length == 0)
 			return 'done!';
-		var instruction = docket[0];
+		var instruction = docket[0];//debugger;
 		instruction.executeFunc();
+		console.log(registerTable['a'].contents());
+		console.log(registerTable['b'].contents());
+		console.log(registerTable['t'].contents());
+		console.log(flag.contents());
+		console.log(counter.contents());
 		execute();
 	}
 
@@ -313,13 +442,14 @@ function Machine(machineData) {
 		counter.set(instructions);
 		execute();
 	}
-
+//debugger;
 	// inputs should be an array
 	// # of inputs should equal # of start regs
 	this.run = function(inputs) {
 		machine.setInputs(inputs);
+		//installInstructions();
 		machine.start();
-		return machine.output;
+		return machine.output();
 	}
 }
 
@@ -328,6 +458,9 @@ function Machine(machineData) {
 
 function Register(name) {
 	 var contents = '*unassigned*';
+	 this.contents = contents;
+
+	 this.name = name;
 
 	 this.contents = function() {
 	 	return contents;
@@ -363,7 +496,7 @@ function Stack() {
 
 /* instructions and assembler */
 
-function Instruction(text) {
+function Instruction(text) {//debugger;
 	/* not actual text, since the controller-text
 		will alreay have been parsed */
 	this.text = text;
@@ -375,11 +508,11 @@ function Instruction(text) {
 
 	if (type == 'assign') {
 		this.assignRegName = text[1];
-		this.assignValueExp = text.slice(2);
+		this.assignValueExp = text.slice(2); // slice???
 	}
 
 	if (type == 'test') {
-		this.testCondition = text.slice(1);
+		this.testCondition = text.slice(1); // slice???
 	}
 
 	if (type == 'branch' || type == 'goto') {
@@ -396,31 +529,38 @@ function Instruction(text) {
 
 	// execution function (dummy initially)
 	var func = function(){};
+	this.func = func;
+	this.funcText = function() {
+		return func + '';
+	}
 
 	this.setFunc = function(f) {
 		func = f;
 	};
 
-	this.executeFunc() = function() {
+	this.executeFunc = function() {
 		func();
 	}
+
 }
 
 // labels should be arranged as a real dictionary,
 // not array pairs (TODO)
+// TODO: fix aliasing
 function assemble(text) {
 	if (text.length == 0)
 		return [ [], [] ];
 
 	// will this recursion be a problem?
-	var result = assemble(text.slice(1));
+	var result = assemble(text.slice(1)); //debugger;
 	var instructions = result[0];
 	var labels = result[1];
 	var nextInstruction = text[0];
 
 	// if nextInstruction is a label
 	if (typeof(nextInstruction) == 'string') {
-		var entry = [nextInstruction, instructions];
+		var instructionsCopy = copyInstructions(instructions)
+		var entry = [nextInstruction, instructionsCopy];
 		labels.unshift(entry);
 		return [instructions, labels];
 	}
@@ -432,6 +572,18 @@ function assemble(text) {
 		instructions.unshift(instruction);
 		return [instructions, labels];
 	}
+}
+
+function copyInstructions(instructions) {
+	var result = [];
+	for (i = 0; i < instructions.length; i++) {
+		var instruction = instructions[i];
+		var text = instruction.text;
+		var instructionCopy = new Instruction(text);
+		result.push(instructionCopy);
+		//result.push(instruction);
+	}
+	return result;
 }
 
 
@@ -532,10 +684,10 @@ function parse(text) {
 			chars.replace(/[(]/g, ' ( ').
 				replace(/[)]/g, ' ) ').
 					split(' ');
-		for (i = 0; i < tokens.length; i++)
-			if (tokens[i] == '')
-				tokens.splice(tokens.indexOf(''),1);
-		return tokens;
+		function emptyStringFilter(token) {
+			return token != '';
+		}
+		return tokens.filter(emptyStringFilter);
 	}
 
 	function atom(token) {
