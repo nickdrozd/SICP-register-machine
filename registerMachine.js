@@ -1,6 +1,15 @@
 /*
 	TODO:
-		~ update the instructions in labels
+		~ clean up all the debugging debris
+		~ set up a real internal debugging system
+			(as per SICP exercises))
+		~ figure out why installInstructions needs
+			to be run every time
+		~ tighten up all the inefficeient repetitions
+			(eg installInstructions running on 
+			two separate instruction lists))
+		~ sort out the private / public methods
+		~ convert labels to a real dictionary
 */
 
 /*
@@ -128,7 +137,7 @@ function Machine(machineData) {
 	}
 
 	this.output = function() {
-		this.lookupRegister(outputRegister).contents();
+		return this.lookupRegister(outputRegister).contents();
 	}
 
 	/* operations */
@@ -176,16 +185,28 @@ function Machine(machineData) {
 	this.instructions = instructions;
 	this.labels = labels;
 
-	debugger;
+	//debugger;
 
 	function installInstructions() {
 		instructions.forEach(function(instruction) {//debugger;
 			//var text = instruction.text;
 			var executionFunc = 
 				makeFunc(instruction);
-
 			instruction.setFunc(executionFunc);
 		});
+
+		var labels = machine.labels;
+		//debugger;
+
+		labels.forEach(function(label) {
+			var assInsts = label[1];
+			assInsts.forEach(function(instruction) {
+				var executionFunc =
+					makeFunc(instruction);
+				instruction.setFunc(executionFunc);
+			});
+		});
+
 /*
 		for (i = 0; i < machine.labels.length; i++) {debugger;
 			var labelInstructions = machine.labels[i][1];
@@ -361,7 +382,7 @@ function Machine(machineData) {
 
 	this.advanceCounter = function() {
 		machine.counter.set(machine.counter.contents().slice(1));
-		console.log('counter advanced!');
+		//console.log('counter advanced!');
 	}
 
 	/* subexpression functions */
@@ -414,7 +435,7 @@ function Machine(machineData) {
 
 	installRegisters();
 	installOperations();
-	installInstructions();
+	//installInstructions();
 
 	/* run */
 
@@ -423,17 +444,21 @@ function Machine(machineData) {
 		individual instructions, rather than in execute?
 	*/
 	function execute() {
+		installInstructions();
 		var docket = counter.contents();
 		//console.log(docket);
-		if (docket.length == 0)
-			return 'done!';
-		var instruction = docket[0];//debugger;
+		if (docket.length == 0) {
+			//console.log('done!');
+			return;
+		}
+		var instruction = docket[0];
+		//console.log(instruction.funcText());//debugger;
 		instruction.executeFunc();
-		console.log(registerTable['a'].contents());
-		console.log(registerTable['b'].contents());
-		console.log(registerTable['t'].contents());
-		console.log(flag.contents());
-		console.log(counter.contents());
+		// console.log(registerTable['a'].contents());
+		// console.log(registerTable['b'].contents());
+		// console.log(registerTable['t'].contents());
+		// console.log(flag.contents());
+		// console.log(counter.contents());
 		execute();
 	}
 
@@ -457,7 +482,7 @@ function Machine(machineData) {
 /* registers */
 
 function Register(name) {
-	 var contents = '*unassigned*';
+	 var contents = 'unassigned';
 	 this.contents = contents;
 
 	 this.name = name;
@@ -546,7 +571,6 @@ function Instruction(text) {//debugger;
 
 // labels should be arranged as a real dictionary,
 // not array pairs (TODO)
-// TODO: fix aliasing
 function assemble(text) {
 	if (text.length == 0)
 		return [ [], [] ];
@@ -626,39 +650,6 @@ function opExpOperands(expression) {
 	return expression.slice(1);
 }
 
-
-/* functional interface (not needed?) */
-
-function pop(stack) {
-	return stack.popIt();
-}
-
-function push(stack, value) {
-	stack.pushIt(value);
-}
-
-function getContents(register) {
-	return register.contents();
-}
-
-function setContents(register, value) {
-	register.set(value);
-}
-
-function getRegister(machine, registerName) {
-	var register = machine.lookupRegister(registerName);
-	return getContents(register);
-}
-
-function setRegister(machine, registerName, value) {
-	var register = machine.lookupRegister(registerName);
-	setContents(register, value);
-}
-
-function startMachine(machine) {
-	machine.start();
-}
-
 /* parser */
 
 function parse(text) {
@@ -696,3 +687,36 @@ function parse(text) {
 		else return test;
 	}
 }
+
+
+/* functional interface (not needed?) */
+
+// function pop(stack) {
+// 	return stack.popIt();
+// }
+
+// function push(stack, value) {
+// 	stack.pushIt(value);
+// }
+
+// function getContents(register) {
+// 	return register.contents();
+// }
+
+// function setContents(register, value) {
+// 	register.set(value);
+// }
+
+// function getRegister(machine, registerName) {
+// 	var register = machine.lookupRegister(registerName);
+// 	return getContents(register);
+// }
+
+// function setRegister(machine, registerName, value) {
+// 	var register = machine.lookupRegister(registerName);
+// 	setContents(register, value);
+// }
+
+// function startMachine(machine) {
+// 	machine.start();
+// }
