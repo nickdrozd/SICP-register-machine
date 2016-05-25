@@ -13,16 +13,10 @@
 		~ the list of registers is implicit
 			in the controllerText, right?
 			figure that out
-		~ can inputs be passed directly to 
-			the machine, rather than a single
-			array of inputs?
-		~ does operations need to be passed as
-			inputs to machines? can it just
-			be called as a global variable? 
 */
 
 /*
-	example (from book):
+	example (from SICP):
 
 	(define gcd-machine
 		(make-machine
@@ -46,10 +40,7 @@
 		> an array of input register names
 			(a subset of register names)
 		> a designated return register name
-			(maybe make that standard?)
-		> a dictionary of operation names
-			paired with actual functions,
-			and
+			(maybe make that standard?), and
 		> the controller text.
 
 	The controller text is in string form
@@ -58,7 +49,7 @@
 	getting passed to the assembler.
 */
 
-var operations = 
+var operationsJS = 
 	 {
 	 	'=' : function(a,b) {return a == b},
 	 	'<' : function(a,b) {return a < b},
@@ -79,7 +70,6 @@ var gcdData =
 		gcdRegisters, 
 		gcdInputRegisters, 
 		gcdOutputRegister, 
-		operations, 
 		gcdControllerText
 	];
 
@@ -95,7 +85,6 @@ var factData =
 		factRegisters,
 		factInputRegisters,
 		factOutputRegister,
-		operations,
 		factControllerText
 	]
 
@@ -149,31 +138,18 @@ function Machine(machineData) {
 
 	//installRegisters();
 
-	this.setInputs = function(inputs) {//debugger;
-		for (i = 0; i < inputs.length; i++){
-			var input = inputs[i];
-			var registerName = inputRegisters[i];
-			var register = machine.lookupRegister(registerName);
-			register.set(input);
-		}
-		return 'inputs set!';
-	}
-
 	this.getRegisterContents = function(name) {
 		var register = machine.lookupRegister(name);
 		return register.contents();
 	}
 
-	this.output = function() {
-		return this.lookupRegister(outputRegister).contents();
-	}
-
 	/* operations */
 
-	var operations = machineData[3];
-	//this.operations = operations;
+	var operations = operationsJS;
 
 	// more basic ops can be added later
+
+	// can this be merged into the global operationsJS?
 	var basicOperations = 
 		{
 			'initializeStack' : 
@@ -188,14 +164,12 @@ function Machine(machineData) {
 				'Unknown operation : ' + name;
 	}
 
+	// is this needed?
 	function installOperations() {
-		//var operations = machine.operations;
 		for (opName in basicOperations){
 			operations[opName] = basicOperations[opName];
 		}
 	}
-
-	//installOperations();
 
 
 	/* instructions */
@@ -207,7 +181,7 @@ function Machine(machineData) {
 			~ assemble
 	*/
 
-	var controllerText = machineData[4];
+	var controllerText = machineData[3];
 	var parsedText = parse(controllerText);
 	var assembledText = assemble(parsedText);
 	var instructions = assembledText[0];
@@ -220,7 +194,6 @@ function Machine(machineData) {
 
 	function installInstructions() {
 		instructions.forEach(function(instruction) {//debugger;
-			//var text = instruction.text;
 			var executionFunc = 
 				makeFunc(instruction);
 			instruction.setFunc(executionFunc);
@@ -237,20 +210,7 @@ function Machine(machineData) {
 				instruction.setFunc(executionFunc);
 			});
 		});
-
-/*
-		for (i = 0; i < machine.labels.length; i++) {debugger;
-			var labelInstructions = machine.labels[i][1];
-			for (j = 0; j < labelInstructions.length; i++) {
-				var instruction = labelInstructions[j];
-				var executionFunc = makeFunc(instruction);
-				instruction.setFunc(executionFunc);
-			}
-		}
-*/
 	}
-
-	//installInstructions();
 
 	// this assumes labels is set up as a array pairs,
 	// rather than a proper dictionary
@@ -290,9 +250,9 @@ function Machine(machineData) {
 		if (type == 'goto')
 			return makeGoto(instruction);
 		if (type == 'push')
-			return makeSave(instruction);
+			return makePush(instruction);
 		if (type == 'pop')
-			return makeRestore(instruction);
+			return makePop(instruction);
 		if (type == 'perform')
 			return makePerform(instruction);
 		else
@@ -311,11 +271,6 @@ function Machine(machineData) {
 		var targetName = instruction.assignRegName;
 		var target = machine.lookupRegister(targetName);
 		var valueExp = instruction.assignValueExp;
-		// var valueFunc;
-		// if (operationExp(valueExp))
-		// 	valueFunc = makeOperationExp(valueExp);
-		// else
-		// 	valueFunc = makePrimitiveExp(valueExp[0]);
 		var valueFunc = operationExp(valueExp) ?
 						makeOperationExp(valueExp) :
 						makePrimitiveExp(valueExp[0]);
@@ -375,7 +330,7 @@ function Machine(machineData) {
 		else throwError('GOOT')
 	}
 
-	function makeSave(instruction) {//debugger;
+	function makePush(instruction) {//debugger;
 		var stackInstRegName = 
 			instruction.stackInstRegName;
 		var register =
@@ -386,7 +341,7 @@ function Machine(machineData) {
 		};
 	}
 
-	function makeRestore(instruction) {
+	function makePop(instruction) {
 		var stackInstRegName = 
 			instruction.stackInstRegName;
 		var register =
@@ -472,10 +427,6 @@ function Machine(machineData) {
 
 	/* run */
 
-	/* 
-		Question: why do we put advanceCounter in the
-		individual instructions, rather than in execute?
-	*/
 	function execute() {
 		installInstructions();
 		var docket = counter.contents();
@@ -501,12 +452,25 @@ function Machine(machineData) {
 		counter.set(instructions);
 		execute();
 	}
-//debugger;
-	// inputs should be an array
+
+	this.setInputs = function(inputs) {//debugger;
+		for (i = 0; i < inputs.length; i++){
+			var input = inputs[i];
+			var registerName = inputRegisters[i];
+			var register = machine.lookupRegister(registerName);
+			register.set(input);
+		}
+		return 'inputs set!';
+	}
+
+	this.output = function() {
+		return this.lookupRegister(outputRegister).contents();
+	}
+
 	// # of inputs should equal # of start regs
-	this.run = function(inputs) {
-		machine.setInputs(inputs);
-		//installInstructions();
+	this.run = function(inputs) {//debugger;
+		var args = Array.prototype.slice.call(arguments);
+		machine.setInputs(args);
 		machine.start();
 		return machine.output();
 	}
@@ -557,9 +521,7 @@ function Stack() {
 /* instructions and assembler */
 
 function Instruction(text) {//debugger;
-	/* not actual text, since the controller-text
-		will alreay have been parsed */
-	this.text = text;
+	this.text = text; // an array, not actual text
 	var text = this.text;
 
 	// instruction types
@@ -641,6 +603,8 @@ function copyInstructions(instructions) {
 		var text = instruction.text;
 		var instructionCopy = new Instruction(text);
 		result.push(instructionCopy);
+		// can instruction aliasing be exploited
+		// to avoid copying twice?
 		//result.push(instruction);
 	}
 	return result;
@@ -686,7 +650,10 @@ function opExpOperands(expression) {
 	return expression.slice(1);
 }
 
-/* parser */
+/* parser
+	(translated from Peter Norvig's 
+	Lispy lisp interpreter) 
+*/
 
 function parse(text) {
 
@@ -725,4 +692,3 @@ function parse(text) {
 }
 
 
-/
