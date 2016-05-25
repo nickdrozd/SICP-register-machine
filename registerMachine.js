@@ -1,15 +1,24 @@
 /*
 	TODO:
 		~ clean up all the debugging debris
-		~ set up a real internal debugging system
-			(as per SICP exercises))
+		~ as per SICP exercises, set up a real
+			internal debugging/stats system
+		~ sort out private/public methods
+		~ convert labels to a real dictionary
 		~ figure out why installInstructions needs
 			to be run every time
 		~ tighten up all the inefficeient repetitions
 			(eg installInstructions running on 
 			two separate instruction lists))
-		~ sort out the private / public methods
-		~ convert labels to a real dictionary
+		~ the list of registers is implicit
+			in the controllerText, right?
+			figure that out
+		~ can inputs be passed directly to 
+			the machine, rather than a single
+			array of inputs?
+		~ does operations need to be passed as
+			inputs to machines? can it just
+			be called as a global variable? 
 */
 
 /*
@@ -49,29 +58,48 @@
 	getting passed to the assembler.
 */
 
-//var controllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (reg a)) rem-loop (test (op <) (reg t) (reg b)) (branch (label rem-done)) (assign t (op -) (reg t) (reg b)) (goto (label rem-loop)) rem-done (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)'
-var controllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (op rem) (reg a) (reg b)) (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)';
-var registers = ['a','b','t'];
-var inputRegisters = ['a','b'];
-var outputRegister = 'a';
 var operations = 
 	 {
-	 	'=' : function(a,b) {return a == b;},
-	 	'<' : function(a,b) {return a < b;},
-	 	'-' : function(a,b) {return a - b;},
-	 	'rem' : function(a,b) {return a % b;},
+	 	'=' : function(a,b) {return a == b},
+	 	'<' : function(a,b) {return a < b},
+	 	'+' : function(a,b) {return a + b},
+	 	'-' : function(a,b) {return a - b},
+	 	'*' : function(a,b) {return a * b},
+	 	'rem' : function(a,b) {return a % b},
 	 }
+
+var gcdControllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (reg a)) rem-loop (test (op <) (reg t) (reg b)) (branch (label rem-done)) (assign t (op -) (reg t) (reg b)) (goto (label rem-loop)) rem-done (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)'
+//var gcdControllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (op rem) (reg a) (reg b)) (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)';
+var gcdRegisters = ['a','b','t'];
+var gcdInputRegisters = ['a','b'];
+var gcdOutputRegister = 'a';
 
 var gcdData = 	
 	[
-		registers, 
-		inputRegisters, 
-		outputRegister, 
+		gcdRegisters, 
+		gcdInputRegisters, 
+		gcdOutputRegister, 
 		operations, 
-		controllerText
+		gcdControllerText
 	];
 
 var gcd = new Machine(gcdData);
+
+var factControllerText = '((assign continue (label end)) down (test (op =) (reg n) (const 1)) (branch (label base)) (push continue) (push n) (assign n (op -) (reg n) (const 1)) (assign continue (label up)) (goto (label down)) up (pop n) (pop continue) (assign result (op *) (reg n) (reg result)) (goto (reg continue)) base (assign result (const 1)) (goto (reg continue)) end)'
+var factRegisters = ['n', 'result', 'continue'];
+var factInputRegisters = ['n'];
+var factOutputRegister = 'result';
+
+var factData = 
+	[
+		factRegisters,
+		factInputRegisters,
+		factOutputRegister,
+		operations,
+		factControllerText
+	]
+
+var fact = new Machine(factData);
 
 function Machine(machineData) {
 	var machine = this;
@@ -97,7 +125,7 @@ function Machine(machineData) {
 		};
 	this.registerTable = registerTable;
 	// leave public for debugging
-	this.lookupRegister = function(name) {
+	this.lookupRegister = function(name) {//debugger;
 		if (name in registerTable) 
 			return registerTable[name];
 		else
@@ -143,12 +171,13 @@ function Machine(machineData) {
 	/* operations */
 
 	var operations = machineData[3];
+	//this.operations = operations;
 
 	// more basic ops can be added later
 	var basicOperations = 
 		{
 			'initializeStack' : 
-			function() {stack.initialize();},
+			function() {machine.stack.initialize();},
 		};
 
 	function lookupOperation(name) {
@@ -160,8 +189,10 @@ function Machine(machineData) {
 	}
 
 	function installOperations() {
-		for (opName in basicOperations)
+		//var operations = machine.operations;
+		for (opName in basicOperations){
 			operations[opName] = basicOperations[opName];
+		}
 	}
 
 	//installOperations();
@@ -258,9 +289,9 @@ function Machine(machineData) {
 			return makeBranch(instruction);
 		if (type == 'goto')
 			return makeGoto(instruction);
-		if (type == 'save')
+		if (type == 'push')
 			return makeSave(instruction);
-		if (type == 'restore')
+		if (type == 'pop')
 			return makeRestore(instruction);
 		if (type == 'perform')
 			return makePerform(instruction);
@@ -336,7 +367,7 @@ function Machine(machineData) {
 			var registerName =
 				regExpRegister(destination);
 			var register = 
-				lookupRegister(registerName);
+				machine.lookupRegister(registerName);
 			return function() {
 				machine.counter.set(register.contents());
 			}
@@ -344,13 +375,14 @@ function Machine(machineData) {
 		else throwError('GOOT')
 	}
 
-	function makeSave(instruction) {
+	function makeSave(instruction) {//debugger;
 		var stackInstRegName = 
 			instruction.stackInstRegName;
 		var register =
 			machine.lookupRegister(stackInstRegName);
 		return function() {
 			machine.stack.pushIt(register.contents());
+			machine.advanceCounter();
 		};
 	}
 
@@ -361,6 +393,7 @@ function Machine(machineData) {
 			machine.lookupRegister(stackInstRegName);
 		return function() {
 			register.set(stack.popIt());
+			machine.advanceCounter();
 		}
 	}
 
@@ -395,7 +428,7 @@ function Machine(machineData) {
 				return constant;
 			};
 		}
-		else if (labelExp(expression)) {
+		else if (labelExp(expression)) {//debugger;
 			var label = labelExpLabel(expression);
 			var labelInstructions = 
 				lookupLabel(label);
@@ -452,11 +485,12 @@ function Machine(machineData) {
 			return;
 		}
 		var instruction = docket[0];
-		//console.log(instruction.funcText());//debugger;
+		//console.log(instruction.funcText());debugger;
 		instruction.executeFunc();
-		// console.log(registerTable['a'].contents());
-		// console.log(registerTable['b'].contents());
-		// console.log(registerTable['t'].contents());
+		// console.log(registerTable['n'].contents());
+		// console.log(registerTable['result'].contents());
+		// console.log(registerTable['continue'].contents());
+		// console.log(stack.contents);
 		// console.log(flag.contents());
 		// console.log(counter.contents());
 		execute();
@@ -500,6 +534,7 @@ function Register(name) {
 
 function Stack() {
 	var contents = [];
+	this.contents = contents;
 
 	this.pushIt = function(value) {
 		contents.unshift(value);
@@ -544,7 +579,7 @@ function Instruction(text) {//debugger;
 		this.destination = text[1];
 	}
 
-	if (type == 'save' || type == 'restore') {
+	if (type == 'push' || type == 'pop') {
 		this.stackInstRegName = text[1];
 	}
 
@@ -571,6 +606,7 @@ function Instruction(text) {//debugger;
 
 // labels should be arranged as a real dictionary,
 // not array pairs (TODO)
+// TODO: fix aliasing
 function assemble(text) {
 	if (text.length == 0)
 		return [ [], [] ];
@@ -689,34 +725,4 @@ function parse(text) {
 }
 
 
-/* functional interface (not needed?) */
-
-// function pop(stack) {
-// 	return stack.popIt();
-// }
-
-// function push(stack, value) {
-// 	stack.pushIt(value);
-// }
-
-// function getContents(register) {
-// 	return register.contents();
-// }
-
-// function setContents(register, value) {
-// 	register.set(value);
-// }
-
-// function getRegister(machine, registerName) {
-// 	var register = machine.lookupRegister(registerName);
-// 	return getContents(register);
-// }
-
-// function setRegister(machine, registerName, value) {
-// 	var register = machine.lookupRegister(registerName);
-// 	setContents(register, value);
-// }
-
-// function startMachine(machine) {
-// 	machine.start();
-// }
+/
