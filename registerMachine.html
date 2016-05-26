@@ -1,10 +1,55 @@
 <!DOCTYPE html>
 <html>
-<meta charset="utf-8"/>
 <head>
-	<title></title>
+	<title>Register Machine Simulator</title>
+	<style>
+     .left { float:left;
+              width: 50% }
+     .right { float: right; width: 50%; }
+	</style>
 </head>
 <body>
 	<script type="text/javascript" src="registerMachine.js"></script>
+
+	<div class="right">
+
+	<textarea id="codeInput" rows="30" style="width: 95%"></textarea>
+
+	</div>
+
+	<div class="left">
+
+	<input type="text" id="registerList"></input>
+
+	<button id="registerListButton">Generate registers</button>
+
+	<script type="text/javascript">
+		function removeSpaces(string) {
+			return string.replace(/[ ]/g, '');
+		}
+
+		function registerParse(listString) {
+			return removeSpaces(listString).split(',');
+		}
+
+		var registerList = registerParse(document.getElementById('registerList'));
+
+	</script>
+
+	<br/> <br/>
+
+	<div id="registerField">
+	<div><input type="radio" name="registers" id="output_1"/> A => <input type="text" id="register_1"></input></div>
+	<div><input type="radio" name="registers" id="output_2"/> B => <input type="text" id="register_2"></input></div>
+	</div>
+    
+	<br/>
+
+	<button id="runButton">Run!</button>
+
+	<br/><br/>
+
+	<div id="output">ANSWER</div>
+	
 </body>
 </html>
