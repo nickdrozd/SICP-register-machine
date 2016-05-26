@@ -10,9 +10,6 @@
 		~ tighten up all the inefficeient repetitions
 			(eg installInstructions running on 
 			two separate instruction lists))
-		~ the list of registers is implicit
-			in the controllerText, right?
-			figure that out
 */
 
 /*
@@ -59,33 +56,29 @@ var operationsJS =
 	 	'rem' : function(a,b) {return a % b},
 	 }
 
-var gcdControllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (reg a)) rem-loop (test (op <) (reg t) (reg b)) (branch (label rem-done)) (assign t (op -) (reg t) (reg b)) (goto (label rem-loop)) rem-done (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)'
-//var gcdControllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (op rem) (reg a) (reg b)) (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)';
-var gcdRegisters = ['a','b','t'];
+//var gcdControllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (reg a)) rem-loop (test (op <) (reg t) (reg b)) (branch (label rem-done)) (assign t (op -) (reg t) (reg b)) (goto (label rem-loop)) rem-done (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)'
+var gcdControllerText = '(test-b (test (op =) (reg b) (const 0)) (branch (label gcd-done)) (assign t (op rem) (reg a) (reg b)) (assign a (reg b)) (assign b (reg t)) (goto (label test-b)) gcd-done)';
 var gcdInputRegisters = ['a','b'];
 var gcdOutputRegister = 'a';
 
 var gcdData = 	
 	[
-		gcdRegisters, 
+		gcdControllerText,
 		gcdInputRegisters, 
 		gcdOutputRegister, 
-		gcdControllerText
 	];
 
 var gcd = new Machine(gcdData);
 
 var factControllerText = '((assign continue (label end)) down (test (op =) (reg n) (const 1)) (branch (label base)) (push continue) (push n) (assign n (op -) (reg n) (const 1)) (assign continue (label up)) (goto (label down)) up (pop n) (pop continue) (assign result (op *) (reg n) (reg result)) (goto (reg continue)) base (assign result (const 1)) (goto (reg continue)) end)'
-var factRegisters = ['n', 'result', 'continue'];
 var factInputRegisters = ['n'];
 var factOutputRegister = 'result';
 
 var factData = 
 	[
-		factRegisters,
+		factControllerText,
 		factInputRegisters,
 		factOutputRegister,
-		factControllerText
 	]
 
 var fact = new Machine(factData);
@@ -103,7 +96,7 @@ function Machine(machineData) {
 
 	/* registers */
 
-	var registerNames = machineData[0];
+	//var registerNames = machineData[0];
 	var inputRegisters = machineData[1];
 	var outputRegister = machineData[2];
 
@@ -135,8 +128,6 @@ function Machine(machineData) {
 			allocateRegister(name);
 		});
 	}
-
-	//installRegisters();
 
 	this.getRegisterContents = function(name) {
 		var register = machine.lookupRegister(name);
@@ -181,7 +172,7 @@ function Machine(machineData) {
 			~ assemble
 	*/
 
-	var controllerText = machineData[3];
+	var controllerText = machineData[0];
 	var parsedText = parse(controllerText);
 	var assembledText = assemble(parsedText);
 	var instructions = assembledText[0];
@@ -421,6 +412,8 @@ function Machine(machineData) {
 
 	/* installation */
 
+	var registerNames = extractRegisters(parsedText);
+
 	installRegisters();
 	installOperations();
 	//installInstructions();
@@ -436,12 +429,15 @@ function Machine(machineData) {
 			return;
 		}
 		var instruction = docket[0];
-		//console.log(instruction.funcText());debugger;
+		console.log(instruction.funcText());//debugger;
 		instruction.executeFunc();
-		// console.log(registerTable['n'].contents());
-		// console.log(registerTable['result'].contents());
-		// console.log(registerTable['continue'].contents());
-		// console.log(stack.contents);
+		for (i in registerTable){
+			var name = registerTable[i].name;
+			var contents = registerTable[i].contents(); 
+			console.log(name + ' : ' + contents);
+		}
+		console.log('stack : ');
+		console.log(stack.contents);
 		// console.log(flag.contents());
 		// console.log(counter.contents());
 		execute();
@@ -610,6 +606,31 @@ function copyInstructions(instructions) {
 	return result;
 }
 
+function extractRegisters(parsedText) {
+	if (typeof(parsedText) == 'string') return [];
+
+	var regKeywords = ['reg', 'assign', 'push', 'pop'];
+
+	if (parsedText.length == 2 && 
+			typeof(parsedText[0]) == 'string' &&
+			typeof(parsedText[1]) == 'string') {
+		if (regKeywords.indexOf(parsedText[0]) != -1)
+			return [parsedText[1]];
+		else return [];
+	}
+
+	var registers = [];
+
+	for (i in parsedText) {
+		registers = 
+			registers.concat(extractRegisters(parsedText[i]));
+	}
+
+	return registers.
+			filter(function(item,ind){
+						return registers.indexOf(item) == ind});	
+}
+
 
 /* expression types (low-level helpers) */
 
@@ -656,7 +677,6 @@ function opExpOperands(expression) {
 */
 
 function parse(text) {
-
 	return readTokens(tokenize(text));
 
 	function readTokens(tokens) {
