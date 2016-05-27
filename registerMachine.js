@@ -1,8 +1,8 @@
 /*
 	TODO:
 		~ clean up all the debugging debris
-		~ as per SICP exercises, set up a real
-			internal debugging/stats system
+		~ as per SICP exercises, set up an
+			internal stats system
 		~ sort out private/public methods
 		~ convert labels to a real dictionary
 		~ figure out why installInstructions needs
@@ -10,6 +10,7 @@
 		~ tighten up all the inefficeient repetitions
 			(eg installInstructions running on 
 			two separate instruction lists))
+		~ allow for flexible code formatting
 */
 
 /*
@@ -33,9 +34,7 @@
 			gcd-done)))
 
 	machineData is an array consisting of
-		> an array of register names,
 		> an array of input register names
-			(a subset of register names)
 		> a designated return register name
 			(maybe make that standard?), and
 		> the controller text.
@@ -45,6 +44,13 @@
 	get parsed into JS array format before
 	getting passed to the assembler.
 */
+
+var DEBUG_MODE = true;
+function debugSwitch() {
+	DEBUG_MODE = !DEBUG_MODE;
+	console.log('DEBUG_MODE ' + 
+				(DEBUG_MODE ? 'on!' : 'off!'));
+}
 
 var operationsJS = 
 	 {
@@ -96,7 +102,6 @@ function Machine(machineData) {
 
 	/* registers */
 
-	//var registerNames = machineData[0];
 	var inputRegisters = machineData[1];
 	var outputRegister = machineData[2];
 
@@ -361,7 +366,12 @@ function Machine(machineData) {
 
 	this.advanceCounter = function() {
 		machine.counter.set(machine.counter.contents().slice(1));
-		//console.log('counter advanced!');
+		if (DEBUG_MODE) {
+			console.log('counter advanced!');
+			console.log('counter : ' + 
+	 			counter.contents().length + 
+	 				' instructions');
+		}
 	}
 
 	/* subexpression functions */
@@ -429,15 +439,15 @@ function Machine(machineData) {
 			return;
 		}
 		var instruction = docket[0];
-		console.log(instruction.funcText());//debugger;
+		// console.log(instruction.funcText());//debugger;
 		instruction.executeFunc();
-		for (i in registerTable){
-			var name = registerTable[i].name;
-			var contents = registerTable[i].contents(); 
-			console.log(name + ' : ' + contents);
-		}
-		console.log('stack : ');
-		console.log(stack.contents);
+		// for (i in registerTable){
+		// 	var name = registerTable[i].name;
+		// 	var contents = registerTable[i].contents(); 
+		// 	console.log(name + ' : ' + contents);
+		// }
+		// console.log('stack : ');
+		// console.log(stack.contents);
 		// console.log(flag.contents());
 		// console.log(counter.contents());
 		execute();
@@ -476,7 +486,7 @@ function Machine(machineData) {
 /* registers */
 
 function Register(name) {
-	 var contents = 'unassigned';
+	 var contents = '???';
 	 this.contents = contents;
 
 	 this.name = name;
@@ -487,6 +497,16 @@ function Register(name) {
 
 	 this.set = function(value) {
 	 	contents = value;
+	 	if (DEBUG_MODE) {
+	 		if (name != 'counter') {
+	 			if (typeof(contents) != 'object')
+	 				console.log(name + ' : ' + value);
+	 			else
+	 				console.log(name + ' : ' + 
+	 								value.length + 
+	 								' instructions');
+	 		}
+	 	}
 	 }
 }
 
@@ -498,14 +518,26 @@ function Stack() {
 
 	this.pushIt = function(value) {
 		contents.unshift(value);
-		return 'push it! push it good!';
+		if (DEBUG_MODE) {
+			console.log('pushing ' + value +
+						 ' to stack');
+			console.log('stack contents : ');
+			console.log(contents);
+		}
 	}
 
 	this.popIt = function() {
 		if (contents.length < 1)
 			throw "Empty stack -- POP";
-		else
+		else {
+			if (DEBUG_MODE) {
+				console.log('popping ' +
+							contents[0]);
+				console.log('stack contents : ');
+				console.log(contents.slice(1));
+			}
 			return contents.shift();
+		}
 	}
 
 	this.initialize = function() {
@@ -558,6 +590,9 @@ function Instruction(text) {//debugger;
 
 	this.executeFunc = function() {
 		func();
+		if (DEBUG_MODE) {
+			console.log(type);
+		}
 	}
 
 }
@@ -622,13 +657,16 @@ function extractRegisters(parsedText) {
 	var registers = [];
 
 	for (i in parsedText) {
-		registers = 
-			registers.concat(extractRegisters(parsedText[i]));
+		var instruction = parsedText[i];
+		var instructionRegisters = 
+			extractRegisters(instruction);
+		registers = registers.concat(instructionRegisters);
 	}
 
 	return registers.
 			filter(function(item,ind){
-						return registers.indexOf(item) == ind});	
+						return registers.
+									indexOf(item) == ind});	
 }
 
 
